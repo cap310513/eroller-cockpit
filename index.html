@@ -1,0 +1,244 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
+<meta name="theme-color" content="#07090d">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="E-Roller">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="apple-touch-icon" href="icons/icon-180.png">
+<link rel="icon" href="icons/icon.svg" type="image/svg+xml">
+<title>E-Roller Cockpit</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<div id="app">
+  <header class="topbar">
+    <div class="brand">
+      <span class="logo" aria-hidden="true"></span>
+      <b>E-Roller</b><small>Cockpit</small>
+    </div>
+    <button id="connChip" class="chip" data-state="off" type="button">
+      <i class="dot"></i><span id="connLabel">Nicht verbunden</span>
+    </button>
+  </header>
+
+  <main>
+    <!-- ============ FAHREN ============ -->
+    <section id="view-ride" class="view active">
+      <div class="card gauge-card">
+        <svg id="gauge" viewBox="0 0 320 275" aria-hidden="true"></svg>
+        <div class="gauge-readout">
+          <div id="speedNum">0</div>
+          <div id="speedUnit">km/h</div>
+        </div>
+        <div class="gauge-foot">
+          <button id="srcBadge" class="pill" type="button">GPS starten</button>
+        </div>
+      </div>
+
+      <div class="stats">
+        <div class="stat"><span>Akku</span><b id="stBat">–</b></div>
+        <div class="stat"><span>Strecke</span><b id="stTrip">0.0 km</b></div>
+        <div class="stat"><span>Max</span><b id="stMax">0</b></div>
+        <div class="stat"><span>Zeit</span><b id="stTime">0:00</b></div>
+      </div>
+
+      <div class="card control">
+        <div class="card-head">
+          <h3 id="levelTitle">Stufe</h3>
+          <div class="stepper">
+            <button id="lvlMinus" class="round" type="button" aria-label="Weniger">−</button>
+            <div class="level-val"><b id="levelNum">10</b><span id="levelMax">/22</span></div>
+            <button id="lvlPlus" class="round" type="button" aria-label="Mehr">+</button>
+          </div>
+        </div>
+        <input id="level" class="slider" type="range" min="1" max="22" step="1" value="10" aria-label="Stufe">
+        <div class="slider-ends"><span>1</span><span id="sliderMaxLbl">22</span></div>
+
+        <div class="row">
+          <div class="row-text"><b>Nullstart</b><small>Anfahren ohne Anschieben</small></div>
+          <label class="switch"><input id="zeroStart" type="checkbox"><span></span></label>
+        </div>
+      </div>
+
+      <div id="banner" class="banner"></div>
+    </section>
+
+    <!-- ============ EINSTELLUNGEN ============ -->
+    <section id="view-settings" class="view">
+      <h2 class="view-title">Einstellungen</h2>
+
+      <div class="card">
+        <h3>Design</h3>
+        <div id="swatches" class="swatches"></div>
+        <label class="field">
+          <span>Eigene Farbe</span>
+          <input id="customColor" type="color" value="#22d3ee">
+        </label>
+        <div class="field">
+          <span>Hintergrund</span>
+          <div class="seg" data-setting="theme.mode">
+            <button type="button" data-value="dark">Dunkel</button>
+            <button type="button" data-value="amoled">Schwarz</button>
+            <button type="button" data-value="light">Hell</button>
+          </div>
+        </div>
+      </div>
+
+      <div class="card">
+        <h3>Cockpit</h3>
+        <div class="field">
+          <span>Einheit</span>
+          <div class="seg" data-setting="unit">
+            <button type="button" data-value="kmh">km/h</button>
+            <button type="button" data-value="mph">mph</button>
+          </div>
+        </div>
+        <div class="field">
+          <span>Tacho-Quelle</span>
+          <div class="seg" data-setting="source">
+            <button type="button" data-value="auto">Auto</button>
+            <button type="button" data-value="scooter">Roller</button>
+            <button type="button" data-value="gps">GPS</button>
+          </div>
+        </div>
+        <div class="field">
+          <span>Regler bedeutet</span>
+          <div class="seg" data-setting="levelKind">
+            <button type="button" data-value="level">Stufe</button>
+            <button type="button" data-value="kmh">km/h</button>
+          </div>
+        </div>
+        <label class="field">
+          <span>Regler: Maximum</span>
+          <input id="maxLevel" class="num" type="number" min="2" max="99" inputmode="numeric">
+        </label>
+        <label class="field">
+          <span>Tacho-Skala bis (km/h)</span>
+          <input id="gaugeMax" class="num" type="number" min="10" max="120" step="5" inputmode="numeric">
+        </label>
+        <div class="row">
+          <div class="row-text"><b>Display anlassen</b><small>Bildschirm bleibt beim Fahren an</small></div>
+          <label class="switch"><input id="wake" type="checkbox"><span></span></label>
+        </div>
+        <button id="resetTrip" class="btn ghost" type="button">Fahrt zurücksetzen</button>
+      </div>
+
+      <div class="card">
+        <h3>App-Sperre</h3>
+        <p class="hint" id="lockHint">Schütze die App mit deiner eigenen PIN (4–8 Ziffern).</p>
+        <div class="btn-row">
+          <button id="lockSet" class="btn" type="button">PIN festlegen</button>
+          <button id="lockRemove" class="btn ghost" type="button">PIN entfernen</button>
+        </div>
+        <button id="lockNow" class="btn ghost" type="button">Jetzt sperren</button>
+      </div>
+
+      <div class="card">
+        <h3>Demo-Modus</h3>
+        <div class="row">
+          <div class="row-text"><b>Simulierte Fahrt</b><small>Zeigt die App mit Testwerten, ganz ohne Roller</small></div>
+          <label class="switch"><input id="demo" type="checkbox"><span></span></label>
+        </div>
+      </div>
+
+      <p class="about">E-Roller Cockpit <span id="ver"></span></p>
+    </section>
+
+    <!-- ============ BLUETOOTH ============ -->
+    <section id="view-ble" class="view">
+      <h2 class="view-title">Bluetooth</h2>
+
+      <div id="bleUnsupported" class="card warn hidden">
+        <h3>Browser kann kein Bluetooth</h3>
+        <p>Safari auf dem iPhone erlaubt keine Bluetooth-Verbindung aus Webseiten. Installiere den kostenlosen Browser <b>Bluefy</b> und öffne diese Seite darin.</p>
+        <a class="btn" href="https://apps.apple.com/de/app/bluefy-web-ble-browser/id1492822055" target="_blank" rel="noopener">Bluefy im App Store</a>
+      </div>
+
+      <div class="card">
+        <h3>Roller verbinden</h3>
+        <p class="hint">Roller einschalten, in die Nähe bringen und auf „Suchen" tippen. Falls der Roller nicht in der Liste erscheint, ist er noch mit einer anderen App verbunden. Dann die App beenden.</p>
+        <div class="btn-row">
+          <button id="bleConnect" class="btn" type="button">Suchen &amp; verbinden</button>
+          <button id="bleDisconnect" class="btn ghost" type="button" disabled>Trennen</button>
+        </div>
+        <details>
+          <summary>Zusätzliche Service-UUIDs (aus nRF Connect)</summary>
+          <textarea id="extraUuids" rows="2" placeholder="z. B. ffe0, 6e400001-b5a3-f393-e0a9-e50e24dcca9e"></textarea>
+        </details>
+      </div>
+
+      <div id="bleInfo" class="card hidden">
+        <h3>Gerät</h3>
+        <div id="bleDevice" class="kv"></div>
+        <h3 class="sub">Services &amp; Merkmale</h3>
+        <div class="btn-row">
+          <button id="bleReadAll" class="btn ghost small" type="button">Alles lesen</button>
+          <button id="bleSubAll" class="btn ghost small" type="button">Alle abonnieren</button>
+        </div>
+        <label class="row slim">
+          <div class="row-text"><b>Schreiben freischalten</b><small>Nur Profis. Falsche Daten können den Roller stören.</small></div>
+          <span class="switch"><input id="bleWriteOk" type="checkbox"><span></span></span>
+        </label>
+        <div id="bleTree" class="tree"></div>
+      </div>
+
+      <div class="card">
+        <h3>Protokoll</h3>
+        <div id="bleLog" class="log" aria-live="polite"></div>
+        <div class="btn-row">
+          <button id="logShare" class="btn small" type="button">Bericht teilen</button>
+          <button id="logCopy" class="btn ghost small" type="button">Kopieren</button>
+          <button id="logClear" class="btn ghost small" type="button">Leeren</button>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <nav class="tabbar" aria-label="Hauptmenü">
+    <button class="tab active" data-view="ride" type="button">
+      <svg viewBox="0 0 24 24"><path d="M4 17a8 8 0 1 1 16 0"/><path d="M12 17l4-5"/><circle cx="12" cy="17" r="1.2"/></svg>
+      <span>Fahren</span>
+    </button>
+    <button class="tab" data-view="settings" type="button">
+      <svg viewBox="0 0 24 24"><path d="M4 7h9M17 7h3M4 17h3M11 17h9"/><circle cx="15" cy="7" r="2"/><circle cx="9" cy="17" r="2"/></svg>
+      <span>Einstellungen</span>
+    </button>
+    <button class="tab" data-view="ble" type="button">
+      <svg viewBox="0 0 24 24"><path d="M7 7l10 10-5 4V3l5 4L7 17"/></svg>
+      <span>Bluetooth</span>
+    </button>
+  </nav>
+</div>
+
+<!-- ============ PIN-SPERRE ============ -->
+<div id="lock" class="lock hidden" role="dialog" aria-modal="true">
+  <div class="lock-inner">
+    <span class="logo big" aria-hidden="true"></span>
+    <h2 id="lockTitle">PIN eingeben</h2>
+    <p id="lockSub"></p>
+    <div id="pinDots" class="dots"></div>
+    <div class="keypad">
+      <button type="button" data-k="1">1</button><button type="button" data-k="2">2</button><button type="button" data-k="3">3</button>
+      <button type="button" data-k="4">4</button><button type="button" data-k="5">5</button><button type="button" data-k="6">6</button>
+      <button type="button" data-k="7">7</button><button type="button" data-k="8">8</button><button type="button" data-k="9">9</button>
+      <button type="button" data-k="cancel" class="aux" id="pinCancel">Abbruch</button>
+      <button type="button" data-k="0">0</button>
+      <button type="button" data-k="del" class="aux" aria-label="Löschen">⌫</button>
+    </div>
+    <button id="pinOk" class="btn" type="button">OK</button>
+    <button id="pinForgot" class="link" type="button">PIN vergessen?</button>
+  </div>
+</div>
+
+<div id="toast" class="toast" role="status"></div>
+
+<script src="protocol.js"></script>
+<script src="app.js"></script>
+</body>
+</html>
