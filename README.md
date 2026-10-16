@@ -7,7 +7,7 @@ Kein Mac, kein App-Store, keine 99 € und keine Erneuerung alle 7 Tage: Die App
 ## So installiert dein Freund sie (einmalig, 2 Minuten)
 
 1. Im App Store den kostenlosen Browser **Bluefy** installieren (er kann als einziger iPhone-Browser Bluetooth aus Webseiten).
-2. In Bluefy den Link zur App öffnen (steht unten, sobald veröffentlicht).
+2. In Bluefy diesen Link öffnen: **https://cap310513.github.io/eroller-cockpit/**
 3. Als Lesezeichen speichern, fertig. Updates kommen automatisch, sobald er die Seite öffnet.
 
 > Safari geht **nicht**: Apple erlaubt dort kein Web Bluetooth.
