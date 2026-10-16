@@ -1,7 +1,7 @@
 (() => {
 'use strict';
 
-const APP_VERSION = '0.1.1';
+const APP_VERSION = '0.1.2';
 const KMH_TO_MPH = 0.621371;
 
 /* =====================================================================
@@ -234,6 +234,7 @@ const state = {
   trip: 0,         // km
   moving: 0,       // s
   max: 0,          // km/h
+  kmh: 0,          // aktuell angezeigte Geschwindigkeit
   lastTick: Date.now(),
 };
 let shown = 0;
@@ -251,7 +252,9 @@ function pushTelemetry(t, src = 'roller') {
 function currentSource() {
   const now = Date.now();
   const sc = state.scooter && now - state.scooter.t < 3500 ? state.scooter : null;
-  const gp = state.gps && now - state.gps.t < 4000 ? state.gps : null;
+  // GPS: ein Fix gilt 20 s als "Signal da". Kommt länger als 4 s kein Update, steht man (Tempo 0).
+  const fix = state.gps && now - state.gps.t < 20000 ? state.gps : null;
+  const gp = fix ? { kmh: now - fix.t < 4000 ? fix.kmh : 0 } : null;
   const mode = settings.source;
   if (mode === 'scooter') return sc ? { kmh: sc.speed, label: sc.src === 'demo' ? 'Demo' : 'Roller' } : null;
   if (mode === 'gps') return gp ? { kmh: gp.kmh, label: 'GPS' } : null;
@@ -471,7 +474,8 @@ function errText(e) {
   } catch { /* egal */ }
   return `${Object.prototype.toString.call(e)} ${String(e)}`;
 }
-const isCancel = (e) => (e && e.name === 'NotFoundError') || /cancel|abgebrochen|dismiss/i.test(errText(e));
+// "Abbrechen" im Auswahlfenster. Chrome meldet auch "Bluetooth adapter not available" als NotFoundError, das zählt NICHT als Abbruch.
+const isCancel = (e) => /cancel|abgebrochen|dismiss/i.test(errText(e)) || (!!e && e.name === 'NotFoundError' && !e.message);
 
 async function selfTest() {
   const bt = navigator.bluetooth;
@@ -501,8 +505,15 @@ function refreshChip() {
   updateBanner();
 }
 
+let bleBusy = false;
 async function bleConnect() {
   if (!navigator.bluetooth) { $('#bleUnsupported').classList.remove('hidden'); showView('ble'); toast('Bitte in Bluefy öffnen'); return; }
+  if (bleBusy) return;   // Doppeltipp: nicht zwei Auswahlfenster gleichzeitig
+  bleBusy = true;
+  try { await bleSearch(); } finally { bleBusy = false; }
+}
+
+async function bleSearch() {
   bleLog('INFO', 'Suche gestartet …');
   // Stufenweise Anfragen: erst mit großer Service-Liste, dann kleiner, dann ganz ohne.
   const attempts = [
@@ -534,6 +545,12 @@ async function bleConnect() {
 async function connectDevice(dev) {
   setConnUi('busy', 'Verbinde …');
   try {
+    // Anderes Gerät noch verbunden? Erst sauber trennen, sonst zwei Verbindungen gleichzeitig.
+    if (ble.device && ble.device !== dev) {
+      ble.device.removeEventListener('gattserverdisconnected', onBleDisconnect);
+      try { if (ble.device.gatt.connected) ble.device.gatt.disconnect(); } catch { /* egal */ }
+      ble.subs.clear();
+    }
     ble.manual = false;
     dev.removeEventListener('gattserverdisconnected', onBleDisconnect);
     dev.addEventListener('gattserverdisconnected', onBleDisconnect);
@@ -761,15 +778,49 @@ function buildReport() {
 async function copyText(text) {
   try { await navigator.clipboard.writeText(text); return true; }
   catch {
-    const ta = h('textarea', { style: 'position:fixed;opacity:0' });
+    const ta = h('textarea', { style: 'position:fixed;opacity:0;font-size:16px' });
     ta.value = text;
     document.body.append(ta);
+    ta.focus();
     ta.select();
+    ta.setSelectionRange(0, text.length);
     let ok = false;
     try { ok = document.execCommand('copy'); } catch { /* egal */ }
     ta.remove();
     return ok;
   }
+}
+
+/* Klappt Kopieren/Teilen nicht, zeigen wir den Bericht zum Selbst-Markieren (lange drücken → Kopieren) */
+function showReport(text) {
+  const box = $('#reportBox');
+  box.value = text;
+  box.classList.remove('hidden');
+  box.focus();
+  box.select();
+  box.setSelectionRange(0, text.length);
+  box.scrollIntoView({ block: 'center' });
+}
+
+async function copyOrShow(text) {
+  if (await copyText(text)) { toast('Bericht kopiert'); return; }
+  showReport(text);
+  toast('Kopieren geht nicht. Text unten markieren und kopieren.', 5000);
+}
+
+/* Neue Version da? GitHub liefert Seiten bis zu 10 Min. aus dem Zwischenspeicher, das umgehen wir hier. */
+async function checkForUpdate() {
+  try {
+    const r = await fetch('version.json?t=' + Date.now(), { cache: 'no-store' });
+    if (!r.ok) return;
+    const { version } = await r.json();
+    const params = new URLSearchParams(location.search);
+    if (version && version !== APP_VERSION && params.get('v') !== version) {   // v-Prüfung verhindert Endlosschleife
+      params.set('v', version);
+      toast(`Neue Version ${version} wird geladen …`, 3000);
+      setTimeout(() => location.replace(`${location.pathname}?${params}`), 700);
+    }
+  } catch { /* offline */ }
 }
 
 /* =====================================================================
@@ -1014,8 +1065,9 @@ function init() {
 
   // GPS-Knopf
   $('#srcBadge').addEventListener('click', () => {
-    if (state.gpsId == null) startGps();
-    else if (currentSource() && currentSource().label === 'GPS') { stopGps(); toast('GPS-Tacho aus'); updateBadge(); }
+    if (state.gpsId == null) { startGps(); return; }
+    const src = currentSource();
+    if (!src || src.label === 'GPS') { stopGps(); toast('GPS-Tacho aus'); updateBadge(); }
   });
   if (settings.source !== 'scooter' && navigator.permissions && navigator.permissions.query) {
     navigator.permissions.query({ name: 'geolocation' }).then((r) => { if (r.state === 'granted') startGps(); }).catch(() => {});
@@ -1028,11 +1080,14 @@ function init() {
   $('#bleReadAll').addEventListener('click', readAll);
   $('#bleSubAll').addEventListener('click', subscribeAll);
   $('#logClear').addEventListener('click', () => { logLines.length = 0; $('#bleLog').replaceChildren(); });
-  $('#logCopy').addEventListener('click', async () => toast((await copyText(buildReport())) ? 'Bericht kopiert' : 'Kopieren nicht möglich'));
+  $('#logCopy').addEventListener('click', () => copyOrShow(buildReport()));
   $('#logShare').addEventListener('click', async () => {
     const text = buildReport();
-    if (navigator.share) { try { await navigator.share({ title: 'E-Roller Bluetooth-Bericht', text }); return; } catch (e) { if (e.name === 'AbortError') return; } }
-    toast((await copyText(text)) ? 'Bericht kopiert' : 'Teilen nicht möglich');
+    if (navigator.share) {
+      try { await navigator.share({ title: 'E-Roller Bluetooth-Bericht', text }); return; }
+      catch (e) { if (e && e.name === 'AbortError') return; }
+    }
+    await copyOrShow(text);
   });
 
   initSettings();
@@ -1041,6 +1096,7 @@ function init() {
   refreshChip();
   updateBanner();
   selfTest();
+  checkForUpdate();
 
   requestWake();
   document.addEventListener('visibilitychange', () => { if (!document.hidden) { wakeLock = null; requestWake(); } });

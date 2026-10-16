@@ -53,3 +53,6 @@ Dann `http://localhost:8080` öffnen. Web Bluetooth funktioniert auf `localhost`
 | `protocol.js` | **Hier kommt das Hitway-Protokoll rein** |
 | `sw.js`, `manifest.webmanifest` | Offline-Cache, Installierbarkeit |
 | `tools/make_icons.py` | erzeugt die PNG-Icons neu |
+| `version.json` | aktuelle Versionsnummer: Die App lädt sich selbst neu, wenn sie älter ist |
+
+**Neue Version veröffentlichen:** Die Nummer an fünf Stellen gleichzeitig erhöhen: `APP_VERSION` in `app.js`, die drei `?v=` in `index.html` und `version.json`. Dann committen und pushen. Danach holt sich jedes Handy die neue Version beim nächsten Öffnen automatisch, auch durch den GitHub-Zwischenspeicher hindurch.

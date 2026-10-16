@@ -46,6 +46,11 @@ body::before {
 }
 .hidden { display: none !important; }
 
+/* iOS: Eingabefelder müssen markier-/tippbar bleiben und dürfen unter 16px nicht reinzoomen */
+input, textarea { -webkit-user-select: text; user-select: text; font-size: 16px; }
+button, input, select, textarea, .slider { touch-action: manipulation; }
+html { touch-action: manipulation; }
+
 #app {
   position: relative;
   z-index: 1;
@@ -259,7 +264,7 @@ details { margin-top: 6px; color: var(--muted); font-size: 14px; }
 details summary { cursor: pointer; padding: 6px 0; }
 textarea {
   width: 100%; margin-top: 6px; background: var(--card); border: 1px solid var(--card-b); color: var(--text);
-  border-radius: 12px; padding: 10px; font: 13px ui-monospace, Menlo, Consolas, monospace; resize: vertical;
+  border-radius: 12px; padding: 10px; font: 16px ui-monospace, Menlo, Consolas, monospace; resize: vertical;
   -webkit-user-select: text; user-select: text;
 }
 .kv { font-size: 14px; display: grid; grid-template-columns: auto 1fr; gap: 4px 12px; }
@@ -280,7 +285,7 @@ textarea {
 .chr-write { display: flex; gap: 6px; margin-top: 6px; }
 .chr-write input {
   flex: 1; min-width: 0; background: var(--card); border: 1px solid var(--card-b); color: var(--text);
-  border-radius: 9px; padding: 7px 9px; font: 12.5px ui-monospace, Menlo, Consolas, monospace;
+  border-radius: 9px; padding: 7px 9px; font: 16px ui-monospace, Menlo, Consolas, monospace;
   -webkit-user-select: text; user-select: text;
 }
 .chr-val { font: 12px ui-monospace, Menlo, Consolas, monospace; color: var(--ok); margin-top: 5px; word-break: break-all; -webkit-user-select: text; user-select: text; }
