@@ -1,7 +1,7 @@
 (() => {
 'use strict';
 
-const APP_VERSION = '0.1.0';
+const APP_VERSION = '0.1.1';
 const KMH_TO_MPH = 0.621371;
 
 /* =====================================================================
@@ -388,7 +388,7 @@ async function sendToScooter(kind, value) {
     if (kind === 'level') await p.setLevel(ble.link, value);
     else await p.setZeroStart(ble.link, value);
   } catch (e) {
-    bleLog('ERR', 'Senden fehlgeschlagen: ' + e.message);
+    bleLog('ERR', 'Senden fehlgeschlagen: ' + errText(e));
     toast('Senden fehlgeschlagen');
   }
 }
@@ -442,16 +442,48 @@ const NAMES = {
 };
 const nameOf = (uuid) => NAMES[uuid.slice(0, 8)] || '';
 
-function serviceList(full = true) {
-  const list = [0x1800, 0x1801, 0x180a, 0x180f, 0x1812, 0x1814, 0x1816, 0x181c, 0x1820, 0xae00, 0xae30, 0xa000, 0xd0ff, 0x1910, 0xfd00, 0xfe00, 0xfe59, 0xfe95,
-    '6e400001-b5a3-f393-e0a9-e50e24dcca9e', '0000ffe0-0000-1000-8000-00805f9b34fb', '0000fff0-0000-1000-8000-00805f9b34fb'];
-  if (full) for (let i = 0xff00; i <= 0xffff; i++) list.push(i);
+/* Immer die lange 128-Bit-Schreibweise: iPhone-Browser wie Bluefy sind bei Kurzformen (Zahlen) pingelig. */
+const uuid16 = (n) => `0000${n.toString(16).padStart(4, '0')}-0000-1000-8000-00805f9b34fb`;
+
+function serviceList(mode = 'full') {
+  const set = new Set();
+  [0x1800, 0x1801, 0x180a, 0x180f, 0x1812, 0x1814, 0x1816, 0x181c, 0x1820, 0xae00, 0xae30, 0xa000, 0xd0ff, 0x1910, 0xfd00, 0xfe00, 0xfe59, 0xfe95, 0xffe0, 0xfff0]
+    .forEach((n) => set.add(uuid16(n)));
+  set.add('6e400001-b5a3-f393-e0a9-e50e24dcca9e');
+  if (mode === 'full') for (let i = 0xff00; i <= 0xffff; i++) set.add(uuid16(i));
   for (const raw of ($('#extraUuids').value || '').split(/[\s,;]+/).filter(Boolean)) {
     const u = raw.toLowerCase();
-    if (/^[0-9a-f]{4}$/.test(u)) list.push(parseInt(u, 16));
-    else if (/^[0-9a-f]{8}-([0-9a-f]{4}-){3}[0-9a-f]{12}$/.test(u)) list.push(u);
+    if (/^[0-9a-f]{4}$/.test(u)) set.add(uuid16(parseInt(u, 16)));
+    else if (/^[0-9a-f]{8}-([0-9a-f]{4}-){3}[0-9a-f]{12}$/.test(u)) set.add(u);
   }
-  return [...new Set(list)];
+  return [...set];
+}
+
+/* Fehler lesbar machen, auch wenn der Browser keinen normalen Error wirft (z. B. nur einen Text) */
+function errText(e) {
+  if (e == null) return String(e);
+  if (typeof e === 'string') return e;
+  const parts = [e.name, e.message].filter(Boolean);
+  if (parts.length) return parts.join(': ');
+  try {
+    const j = JSON.stringify(e);
+    if (j && j !== '{}') return j;
+  } catch { /* egal */ }
+  return `${Object.prototype.toString.call(e)} ${String(e)}`;
+}
+const isCancel = (e) => (e && e.name === 'NotFoundError') || /cancel|abgebrochen|dismiss/i.test(errText(e));
+
+async function selfTest() {
+  const bt = navigator.bluetooth;
+  bleLog('INFO', `E-Roller Cockpit v${APP_VERSION}`);
+  bleLog('INFO', `Browser: ${navigator.userAgent}`);
+  bleLog('INFO', `https: ${isSecureContext ? 'ja' : 'NEIN'} · Web Bluetooth: ${bt ? 'ja' : 'NEIN (Bluefy nutzen)'}`);
+  if (!bt) return;
+  bleLog('INFO', 'Funktionen: ' + ['requestDevice', 'getAvailability', 'getDevices'].map((k) => `${k} ${typeof bt[k] === 'function' ? 'ja' : 'nein'}`).join(', '));
+  if (typeof bt.getAvailability === 'function') {
+    try { bleLog('INFO', `Bluetooth am Gerät verfügbar: ${await bt.getAvailability()}`); }
+    catch (e) { bleLog('ERR', `getAvailability: ${errText(e)}`); }
+  }
 }
 
 function setConnUi(stateName, label) {
@@ -471,20 +503,29 @@ function refreshChip() {
 
 async function bleConnect() {
   if (!navigator.bluetooth) { $('#bleUnsupported').classList.remove('hidden'); showView('ble'); toast('Bitte in Bluefy öffnen'); return; }
-  let dev;
-  try {
-    bleLog('INFO', 'Suche gestartet …');
+  bleLog('INFO', 'Suche gestartet …');
+  // Stufenweise Anfragen: erst mit großer Service-Liste, dann kleiner, dann ganz ohne.
+  const attempts = [
+    ['große Liste', () => ({ acceptAllDevices: true, optionalServices: serviceList('full') })],
+    ['kleine Liste', () => ({ acceptAllDevices: true, optionalServices: serviceList('small') })],
+    ['ohne Zusatzliste', () => ({ acceptAllDevices: true })],
+  ];
+  let dev = null;
+  let lastErr = null;
+  for (const [label, makeOpts] of attempts) {
     try {
-      dev = await navigator.bluetooth.requestDevice({ acceptAllDevices: true, optionalServices: serviceList(true) });
+      dev = await navigator.bluetooth.requestDevice(makeOpts());
+      if (label !== attempts[0][0]) bleLog('INFO', `Suche mit „${label}“ hat funktioniert.`);
+      break;
     } catch (e) {
-      if (e.name === 'TypeError' || e.name === 'SyntaxError') {
-        bleLog('INFO', 'Große Service-Liste nicht unterstützt, versuche kleinere …');
-        dev = await navigator.bluetooth.requestDevice({ acceptAllDevices: true, optionalServices: serviceList(false) });
-      } else throw e;
+      if (isCancel(e)) { bleLog('INFO', 'Kein Gerät ausgewählt (Suche abgebrochen oder nichts gefunden).'); return; }
+      lastErr = e;
+      bleLog('ERR', `Suche mit „${label}“ abgelehnt: ${errText(e)}`);
     }
-  } catch (e) {
-    if (e.name !== 'NotFoundError') { bleLog('ERR', e.message); toast('Suche fehlgeschlagen: ' + e.message); }
-    else bleLog('INFO', 'Suche abgebrochen.');
+  }
+  if (!dev) {
+    toast(`Suche fehlgeschlagen: ${errText(lastErr)}`, 6000);
+    bleLog('INFO', 'Bitte prüfen: iPhone-Einstellungen → Bluefy → Bluetooth erlauben · Bluetooth am iPhone an · Roller an und nicht mit der HITWAY-App verbunden · Bluefy neu starten. Dann „Bericht teilen“ und an Jan schicken.');
     return;
   }
   await connectDevice(dev);
@@ -502,7 +543,12 @@ async function connectDevice(dev) {
     ble.server = server;
     ble.connected = true;
     ble.reconnects = 0;
-    await discover();
+    try { await discover(); }
+    catch (e) {
+      ble.services = [];
+      bleLog('ERR', `Services nicht lesbar: ${errText(e)}`);
+      bleLog('INFO', 'Verbunden, aber der Browser gibt keine Services frei. Trage die UUIDs aus nRF Connect unter „Zusätzliche Service-UUIDs“ ein und verbinde neu.');
+    }
     ble.link = makeLink();
     ble.profile = (window.ScooterProtocols || []).find((p) => p.matches(dev.name)) || null;
     if (ble.profile) {
@@ -513,8 +559,8 @@ async function connectDevice(dev) {
     safeReads();
   } catch (e) {
     ble.connected = false;
-    bleLog('ERR', 'Verbindung fehlgeschlagen: ' + e.message);
-    toast('Verbindung fehlgeschlagen');
+    bleLog('ERR', 'Verbindung fehlgeschlagen: ' + errText(e));
+    toast('Verbindung fehlgeschlagen: ' + errText(e), 5000);
   }
   renderBle();
   refreshChip();
@@ -555,7 +601,7 @@ async function discover() {
           value: null,
         });
       }
-    } catch (e) { bleLog('ERR', `Merkmale von ${s.uuid} nicht lesbar: ${e.message}`); }
+    } catch (e) { bleLog('ERR', `Merkmale von ${s.uuid} nicht lesbar: ${errText(e)}`); }
     ble.services.push(entry);
   }
   bleLog('INFO', `${ble.services.length} Services gefunden.`);
@@ -609,7 +655,7 @@ async function readChar(c) {
     const dv = await c.ref.readValue();
     c.value = dv;
     bleLog('RX', `${c.uuid.slice(4, 8)} gelesen: ${toHex(dv)}  | ${toAscii(dv)}`);
-  } catch (e) { bleLog('ERR', `Lesen: ${e.message}`); }
+  } catch (e) { bleLog('ERR', `Lesen: ${errText(e)}`); }
   renderBle();
 }
 
@@ -630,7 +676,7 @@ async function toggleNotify(c) {
       ble.subs.set(c.uuid, fn);
       bleLog('INFO', `Abo gestartet: ${c.uuid.slice(4, 8)}`);
     }
-  } catch (e) { bleLog('ERR', `Benachrichtigung: ${e.message}`); }
+  } catch (e) { bleLog('ERR', `Benachrichtigung: ${errText(e)}`); }
   renderBle();
 }
 
@@ -641,7 +687,7 @@ async function writeChar(c, hexStr) {
     bleLog('TX', `${c.uuid.slice(4, 8)}: ${toHex(bytes)}`);
     if (c.props.includes('writeWithoutResponse') && !c.props.includes('write')) await c.ref.writeValueWithoutResponse(bytes);
     else await c.ref.writeValueWithResponse(bytes);
-  } catch (e) { bleLog('ERR', `Schreiben: ${e.message}`); toast(e.message); }
+  } catch (e) { bleLog('ERR', `Schreiben: ${errText(e)}`); toast(errText(e)); }
 }
 
 function renderBle() {
@@ -994,7 +1040,7 @@ function init() {
   if (settings.demo) startDemo();
   refreshChip();
   updateBanner();
-  bleLog('INFO', `E-Roller Cockpit v${APP_VERSION} bereit. Web Bluetooth: ${navigator.bluetooth ? 'ja' : 'NEIN (Bluefy nutzen)'}`);
+  selfTest();
 
   requestWake();
   document.addEventListener('visibilitychange', () => { if (!document.hidden) { wakeLock = null; requestWake(); } });
